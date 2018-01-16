@@ -28,6 +28,7 @@ import java.text.SimpleDateFormat;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Locale;
 
 /**
  * Provide views to RecyclerView with the directory entries.
@@ -79,8 +80,12 @@ public class UsageListAdapter extends RecyclerView.Adapter<UsageListAdapter.View
     public void onBindViewHolder(ViewHolder viewHolder, final int position) {
         viewHolder.getPackageName().setText(
                 mCustomUsageStatsList.get(position).usageStats.getPackageName());
-        long lastTimeUsed = mCustomUsageStatsList.get(position).usageStats.getLastTimeUsed();
-        viewHolder.getLastTimeUsed().setText(mDateFormat.format(new Date(lastTimeUsed)));
+        long lastTimeUsed = mCustomUsageStatsList.get(position).usageStats.getTotalTimeInForeground();
+        lastTimeUsed = lastTimeUsed / (1000 * 60);  // minutes
+        long lastTimeUsedHours = lastTimeUsed / 60;
+        long lastTimeUsedMinutes = lastTimeUsed - lastTimeUsedHours * 60;
+        viewHolder.getLastTimeUsed().setText(String.format(Locale.getDefault(), "%02d:%02d",
+                lastTimeUsedHours, lastTimeUsedMinutes));
         viewHolder.getAppIcon().setImageDrawable(mCustomUsageStatsList.get(position).appIcon);
     }
 

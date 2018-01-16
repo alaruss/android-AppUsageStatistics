@@ -18,6 +18,7 @@ package com.example.android.appusagestatistics;
 
 import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
+import android.content.Context;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
@@ -56,6 +57,7 @@ public class AppUsageStatisticsFragment extends Fragment {
     RecyclerView.LayoutManager mLayoutManager;
     Button mOpenUsageSettingButton;
     Spinner mSpinner;
+    int MIN_VISIBLE_TIME = 1000 * 60;
 
     /**
      * Use this factory method to create a new instance of
@@ -77,12 +79,12 @@ public class AppUsageStatisticsFragment extends Fragment {
         super.onCreate(savedInstanceState);
 
         mUsageStatsManager = (UsageStatsManager) getActivity()
-                .getSystemService("usagestats"); //Context.USAGE_STATS_SERVICE
+                .getSystemService(Context.USAGE_STATS_SERVICE); //Context.USAGE_STATS_SERVICE
     }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container,
-            Bundle savedInstanceState) {
+                             Bundle savedInstanceState) {
         return inflater.inflate(R.layout.fragment_app_usage_statistics, container, false);
     }
 
@@ -111,7 +113,7 @@ public class AppUsageStatisticsFragment extends Fragment {
                 if (statsUsageInterval != null) {
                     List<UsageStats> usageStatsList =
                             getUsageStatistics(statsUsageInterval.mInterval);
-                    Collections.sort(usageStatsList, new LastTimeLaunchedComparatorDesc());
+                    Collections.sort(usageStatsList, new TotalTimeInForegroundComparatorDesc());
                     updateAppsList(usageStatsList);
                 }
             }
@@ -130,7 +132,6 @@ public class AppUsageStatisticsFragment extends Fragment {
      *                     Corresponding to the value of {@link UsageStatsManager}.
      *                     E.g. {@link UsageStatsManager#INTERVAL_DAILY}, {@link
      *                     UsageStatsManager#INTERVAL_WEEKLY},
-     *
      * @return A list of {@link android.app.usage.UsageStats}.
      */
     public List<UsageStats> getUsageStatistics(int intervalType) {
@@ -168,8 +169,12 @@ public class AppUsageStatisticsFragment extends Fragment {
     void updateAppsList(List<UsageStats> usageStatsList) {
         List<CustomUsageStats> customUsageStatsList = new ArrayList<>();
         for (int i = 0; i < usageStatsList.size(); i++) {
+            UsageStats usageStats = usageStatsList.get(i);
+            if (usageStats.getTotalTimeInForeground() < MIN_VISIBLE_TIME) {
+                continue;
+            }
             CustomUsageStats customUsageStats = new CustomUsageStats();
-            customUsageStats.usageStats = usageStatsList.get(i);
+            customUsageStats.usageStats = usageStats;
             try {
                 Drawable appIcon = getActivity().getPackageManager()
                         .getApplicationIcon(customUsageStats.usageStats.getPackageName());
@@ -199,10 +204,17 @@ public class AppUsageStatisticsFragment extends Fragment {
         }
     }
 
+    private static class TotalTimeInForegroundComparatorDesc implements Comparator<UsageStats> {
+
+        @Override
+        public int compare(UsageStats left, UsageStats right) {
+            return Long.compare(right.getTotalTimeInForeground(), left.getTotalTimeInForeground());
+        }
+    }
+
     /**
      * Enum represents the intervals for {@link android.app.usage.UsageStatsManager} so that
      * values for intervals can be found by a String representation.
-     *
      */
     //VisibleForTesting
     static enum StatsUsageInterval {

@@ -20,6 +20,7 @@ import android.app.usage.UsageStats;
 import android.app.usage.UsageStatsManager;
 import android.content.Context;
 import android.content.Intent;
+import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
 import android.graphics.drawable.Drawable;
 import android.os.Bundle;
@@ -41,6 +42,7 @@ import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 
 /**
@@ -113,7 +115,6 @@ public class AppUsageStatisticsFragment extends Fragment {
                 if (statsUsageInterval != null) {
                     List<UsageStats> usageStatsList =
                             getUsageStatistics(statsUsageInterval.mInterval);
-                    Collections.sort(usageStatsList, new TotalTimeInForegroundComparatorDesc());
                     updateAppsList(usageStatsList);
                 }
             }
@@ -122,6 +123,12 @@ public class AppUsageStatisticsFragment extends Fragment {
             public void onNothingSelected(AdapterView<?> parent) {
             }
         });
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        mSpinner.setSelection(mSpinner.getSelectedItemPosition());
     }
 
     /**
@@ -137,11 +144,18 @@ public class AppUsageStatisticsFragment extends Fragment {
     public List<UsageStats> getUsageStatistics(int intervalType) {
         // Get the app statistics since one year ago from the current time.
         Calendar cal = Calendar.getInstance();
-        cal.add(Calendar.YEAR, -1);
+        if (StatsUsageInterval.DAILY.mInterval == intervalType) {
+            cal.add(Calendar.DAY_OF_MONTH, -1);
+        } else if (StatsUsageInterval.WEEKLY.mInterval == intervalType) {
+            cal.add(Calendar.DAY_OF_MONTH, -7);
+        } else if (StatsUsageInterval.MONTHLY.mInterval == intervalType) {
+            cal.add(Calendar.MONTH, -1);
+        } else {
+            cal.add(Calendar.YEAR, -1);
+        }
 
         List<UsageStats> queryUsageStats = mUsageStatsManager
-                .queryUsageStats(intervalType, cal.getTimeInMillis(),
-                        System.currentTimeMillis());
+                .queryUsageStats(intervalType, cal.getTimeInMillis(), System.currentTimeMillis());
 
         if (queryUsageStats.size() == 0) {
             Log.i(TAG, "The user may not allow the access to apps usage. ");
@@ -167,48 +181,51 @@ public class AppUsageStatisticsFragment extends Fragment {
      */
     //VisibleForTesting
     void updateAppsList(List<UsageStats> usageStatsList) {
-        List<CustomUsageStats> customUsageStatsList = new ArrayList<>();
+        HashMap<String, CustomUsageStats> customUsageStatsMap = new HashMap<>();
+        PackageManager packageManager = getActivity().getPackageManager();
+
+
         for (int i = 0; i < usageStatsList.size(); i++) {
             UsageStats usageStats = usageStatsList.get(i);
-            if (usageStats.getTotalTimeInForeground() < MIN_VISIBLE_TIME) {
+            long foregroundTime = usageStats.getTotalTimeInForeground();
+            if (foregroundTime < MIN_VISIBLE_TIME) {
                 continue;
             }
+
             CustomUsageStats customUsageStats = new CustomUsageStats();
             customUsageStats.usageStats = usageStats;
+            customUsageStats.foregroundTime = foregroundTime;
+            String packageName = customUsageStats.usageStats.getPackageName();
+
             try {
-                Drawable appIcon = getActivity().getPackageManager()
-                        .getApplicationIcon(customUsageStats.usageStats.getPackageName());
-                customUsageStats.appIcon = appIcon;
+                ApplicationInfo appInfo = packageManager.getApplicationInfo(packageName, 0);
+                customUsageStats.appName = packageManager.getApplicationLabel(appInfo).toString();
+                customUsageStats.appIcon = packageManager.getApplicationIcon(appInfo);
             } catch (PackageManager.NameNotFoundException e) {
-                Log.w(TAG, String.format("App Icon is not found for %s",
-                        customUsageStats.usageStats.getPackageName()));
-                customUsageStats.appIcon = getActivity()
-                        .getDrawable(R.drawable.ic_default_app_launcher);
+                Log.w(TAG, String.format("App information is not found for %s", packageName));
+                customUsageStats.appName = packageName;
+                customUsageStats.appIcon = getActivity().getDrawable(R.drawable.ic_default_app_launcher);
             }
-            customUsageStatsList.add(customUsageStats);
+            if (customUsageStatsMap.containsKey(customUsageStats.appName)) {
+                customUsageStatsMap.get(customUsageStats.appName).foregroundTime += foregroundTime;
+            } else {
+                customUsageStatsMap.put(customUsageStats.appName, customUsageStats);
+            }
         }
+        List<CustomUsageStats> customUsageStatsList = new ArrayList<>(customUsageStatsMap.values());
+
+        Collections.sort(customUsageStatsList, new TotalTimeInForegroundComparatorDesc());
         mUsageListAdapter.setCustomUsageStatsList(customUsageStatsList);
         mUsageListAdapter.notifyDataSetChanged();
         mRecyclerView.scrollToPosition(0);
     }
 
-    /**
-     * The {@link Comparator} to sort a collection of {@link UsageStats} sorted by the timestamp
-     * last time the app was used in the descendant order.
-     */
-    private static class LastTimeLaunchedComparatorDesc implements Comparator<UsageStats> {
+
+    private static class TotalTimeInForegroundComparatorDesc implements Comparator<CustomUsageStats> {
 
         @Override
-        public int compare(UsageStats left, UsageStats right) {
-            return Long.compare(right.getLastTimeUsed(), left.getLastTimeUsed());
-        }
-    }
-
-    private static class TotalTimeInForegroundComparatorDesc implements Comparator<UsageStats> {
-
-        @Override
-        public int compare(UsageStats left, UsageStats right) {
-            return Long.compare(right.getTotalTimeInForeground(), left.getTotalTimeInForeground());
+        public int compare(CustomUsageStats left, CustomUsageStats right) {
+            return Long.compare(right.foregroundTime, left.foregroundTime);
         }
     }
 

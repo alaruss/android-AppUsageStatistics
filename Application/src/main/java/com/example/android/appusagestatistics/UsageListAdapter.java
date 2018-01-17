@@ -78,15 +78,14 @@ public class UsageListAdapter extends RecyclerView.Adapter<UsageListAdapter.View
 
     @Override
     public void onBindViewHolder(ViewHolder viewHolder, final int position) {
-        viewHolder.getPackageName().setText(
-                mCustomUsageStatsList.get(position).usageStats.getPackageName());
-        long lastTimeUsed = mCustomUsageStatsList.get(position).usageStats.getTotalTimeInForeground();
-        lastTimeUsed = lastTimeUsed / (1000 * 60);  // minutes
-        long lastTimeUsedHours = lastTimeUsed / 60;
-        long lastTimeUsedMinutes = lastTimeUsed - lastTimeUsedHours * 60;
-        viewHolder.getLastTimeUsed().setText(String.format(Locale.getDefault(), "%02d:%02d",
-                lastTimeUsedHours, lastTimeUsedMinutes));
+        viewHolder.getPackageName().setText(mCustomUsageStatsList.get(position).appName);
         viewHolder.getAppIcon().setImageDrawable(mCustomUsageStatsList.get(position).appIcon);
+
+        long foregroundTimeMinutes = mCustomUsageStatsList.get(position).foregroundTime / (1000 * 60);
+        long foregroundTimeHours = foregroundTimeMinutes / 60;
+        foregroundTimeMinutes = foregroundTimeMinutes - foregroundTimeHours * 60;
+        viewHolder.getLastTimeUsed().setText(String.format(Locale.getDefault(), "%02d:%02d",
+                foregroundTimeHours, foregroundTimeMinutes));
     }
 
     @Override
